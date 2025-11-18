@@ -86,6 +86,12 @@ var deadlock_check_timer: float = 0.0
 var last_player_position: Vector2i
 var position_stuck_time: float = 0.0
 
+func ensure_loot_config_loaded():
+	"""Ensure loot generation config is properly initialized"""
+	if not loot_gen_config:
+		loot_gen_config = LootGenerationConfig.new()
+		print("⚠️ loot_gen_config was null, creating new instance")
+
 func _ready():
 	# Initialize loot configurations
 	loot_config = LootConfig.new()
@@ -110,6 +116,7 @@ func _ready():
 
 func _process(delta: float):
 	"""Monitor for deadlock situations and provide automatic solutions"""
+	ensure_loot_config_loaded()
 	deadlock_check_timer += delta
 	
 	if deadlock_check_timer >= loot_gen_config.deadlock_check_interval:
@@ -1519,6 +1526,8 @@ func position_has_loot(pos: Vector2i) -> bool:
 
 func create_strategic_clusters(positions: Array[Vector2i]) -> Dictionary:
 	"""Create clusters of positions for strategic loot placement"""
+	ensure_loot_config_loaded()
+	
 	var clusters = {
 		"high_value": Array[Vector2i](),    # Near enemies, harder to reach
 		"medium_value": Array[Vector2i](),  # Moderate accessibility
@@ -1535,7 +1544,8 @@ func create_strategic_clusters(positions: Array[Vector2i]) -> Dictionary:
 		# Check if near any enemy
 		for enemy in enemies:
 			var enemy_distance = abs(pos.x - enemy.grid_x) + abs(pos.y - enemy.grid_y)
-			if enemy_distance <= loot_gen_config.high_value_enemy_distance:
+			var max_distance = loot_gen_config.high_value_enemy_distance
+			if enemy_distance <= max_distance:
 				near_enemy = true
 				break
 		
