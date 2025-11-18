@@ -1580,35 +1580,8 @@ func create_loot_item_at_position(loot_type: String, pos: Vector2i):
 	# Add to scene and tracking array
 	add_child(loot_item)
 	loot_items.append(loot_item)
-		var items_in_category = loot_categories[category]
-		for i in range(quantity):
-			var random_item = items_in_category[randi() % items_in_category.size()]
-			loot_plan.append(random_item)
 	
-	# Fill remaining slots with random items if needed
-	while loot_plan.size() < total_positions:
-		var all_types = get_all_loot_types()
-		var random_type = all_types[randi() % all_types.size()]
-		if random_type not in loot_categories["enemies"]:  # Don't add enemy loot randomly
-			loot_plan.append(random_type)
-	
-	# Shuffle the plan for random placement
-	loot_plan.shuffle()
-	
-	print("=== PLACING LOOT ITEMS ===")
-	
-	# Place enemy loot items first
-	for pos in enemy_pos:
-		var enemy_at_pos = get_enemy_at_position(pos)
-		create_enemy_loot_item(pos, enemy_at_pos)
-	
-	# Place regular loot items according to plan
-	for i in range(min(loot_plan.size(), valid_pos.size())):
-		var pos = valid_pos[i]
-		var loot_type = loot_plan[i]
-		create_specific_loot_item(pos, loot_type)
-	
-	print("=== LOOT DISTRIBUTION COMPLETE ===")
+
 
 func is_valid_loot_position(pos: Vector2i) -> bool:
 	"""Check if a position is valid for dropping loot"""
@@ -1710,3 +1683,30 @@ func create_loot_item(pos: Vector2i):
 	
 	# Use the specific creation function
 	create_specific_loot_item(pos, loot_type)
+
+func is_valid_grid_position(pos: Vector2i) -> bool:
+	"""Check if position is within grid bounds"""
+	return pos.x >= 0 and pos.x < grid_size and pos.y >= 0 and pos.y < grid_size
+
+func is_position_blocked(pos: Vector2i) -> bool:
+	"""Check if position is blocked by obstacle, player, or enemy"""
+	# Check for obstacle
+	var obstacle = get_obstacle(pos.x, pos.y)
+	if obstacle:
+		return true
+	
+	# Check for player
+	if player and Vector2i(player.grid_x, player.grid_y) == pos:
+		return true
+	
+	# Check for enemies
+	for enemy in enemies:
+		if Vector2i(enemy.grid_x, enemy.grid_y) == pos:
+			return true
+	
+	# Check for existing loot
+	for loot in loot_items:
+		if is_instance_valid(loot) and Vector2i(loot.grid_x, loot.grid_y) == pos:
+			return true
+	
+	return false
