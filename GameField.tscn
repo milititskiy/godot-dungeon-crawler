@@ -1,0 +1,69 @@
+[gd_scene load_steps=2 format=3 uid="uid://cnqjg8u3dbvj7"]
+
+[ext_resource type="Script" path="res://GameField.gd" id="1_x8v4m"]
+
+[node name="GameField" type="Node2D"]
+script = ExtResource("1_x8v4m")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(320, 320)
+
+[node name="GridContainer" type="Node2D" parent="."]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="InfoPanel" type="Panel" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 200.0
+offset_bottom = 160.0
+
+[node name="ControlPanel" type="Panel" parent="UI"]
+offset_left = 10.0
+offset_top = 170.0
+offset_right = 200.0
+offset_bottom = 220.0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/InfoPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+
+[node name="Title" type="Label" parent="UI/InfoPanel/VBoxContainer"]
+layout_mode = 2
+text = "10x10 Tile Field"
+horizontal_alignment = 1
+
+[node name="Instructions" type="Label" parent="UI/InfoPanel/VBoxContainer"]
+layout_mode = 2
+text = "Click tile: Move with A*
+Arrow keys: Single step
+Right-click: Toggle tiles/interact
+Scroll: Zoom
+Middle drag: Pan
+
+Obstacles:
+Gray: Wall (blocks)
+Purple: Interactive (door)
+Brown: Destructible
+Red: Trap (passable)"
+horizontal_alignment = 1
+
+[node name="ControlContainer" type="VBoxContainer" parent="UI/ControlPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+
+[node name="StartButton" type="Button" parent="UI/ControlPanel/ControlContainer"]
+layout_mode = 2
+text = "Start"
