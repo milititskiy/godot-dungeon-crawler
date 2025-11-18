@@ -78,16 +78,22 @@ var combat_target_enemy: CharacterBody2D = null
 
 @onready var camera = $Camera2D
 
+# Loot Generation Configuration System
+var loot_gen_config: LootGenerationConfig
+
 # Anti-deadlock system
 var deadlock_check_timer: float = 0.0
-var deadlock_check_interval: float = 5.0  # Check every 5 seconds
 var last_player_position: Vector2i
 var position_stuck_time: float = 0.0
-var max_stuck_time: float = 10.0  # 10 seconds before intervention
 
 func _ready():
-	# Initialize loot configuration
+	# Initialize loot configurations
 	loot_config = LootConfig.new()
+	loot_gen_config = LootGenerationConfig.new()
+	
+	# Apply default preset (can be changed via UI or save file)
+	# loot_gen_config.apply_easy_mode()  # Uncomment for easier gameplay
+	# loot_gen_config.apply_match3_focused()  # Uncomment for match-3 focus
 	
 	grid_container = $GridContainer
 	generate_grid()
@@ -96,14 +102,17 @@ func _ready():
 	spawn_enemies()
 	center_camera()
 	
-	# Initialize anti-deadlock system
+	# Initialize anti-deadlock system with config values
 	last_player_position = Vector2i(player.grid_x, player.grid_y)
+	
+	# Test configuration system
+	test_config_system()
 
 func _process(delta: float):
 	"""Monitor for deadlock situations and provide automatic solutions"""
 	deadlock_check_timer += delta
 	
-	if deadlock_check_timer >= deadlock_check_interval:
+	if deadlock_check_timer >= loot_gen_config.deadlock_check_interval:
 		deadlock_check_timer = 0.0
 		check_for_deadlock_situation()
 
@@ -113,9 +122,9 @@ func check_for_deadlock_situation():
 	
 	# Check if player is stuck in same position
 	if current_pos == last_player_position:
-		position_stuck_time += deadlock_check_interval
+		position_stuck_time += loot_gen_config.deadlock_check_interval
 		
-		if position_stuck_time >= max_stuck_time:
+		if position_stuck_time >= loot_gen_config.max_stuck_time:
 			print("🚨 DEADLOCK DETECTED: Player stuck for ", position_stuck_time, " seconds")
 			resolve_deadlock_situation(current_pos)
 			position_stuck_time = 0.0
@@ -132,10 +141,10 @@ func check_movement_options(player_pos: Vector2i):
 	var available_moves = count_available_moves(player_pos)
 	var available_actions = count_available_actions(player_pos)
 	
-	if available_moves < 2 and available_actions == 0:
+	if available_moves < loot_gen_config.min_movement_options and available_actions == 0:
 		print("⚠️ LIMITED OPTIONS: Only ", available_moves, " moves, ", available_actions, " actions")
-		if available_moves == 0:
-			print("🆘 EMERGENCY: No movement options available!")
+		if available_moves + available_actions < loot_gen_config.min_total_actions:
+			print("🆘 EMERGENCY: Insufficient options available!")
 			resolve_deadlock_situation(player_pos)
 
 func count_available_moves(pos: Vector2i) -> int:
@@ -165,10 +174,10 @@ func count_available_actions(pos: Vector2i) -> int:
 	for loot in loot_items:
 		if is_instance_valid(loot):
 			var distance = abs(loot.grid_x - pos.x) + abs(loot.grid_y - pos.y)
-			if distance <= 2:  # Within reasonable reach
+			if distance <= loot_gen_config.action_check_radius:
 				nearby_loot += 1
 	
-	actions += min(nearby_loot, 3)  # Cap loot actions for calculation
+	actions += min(nearby_loot, loot_gen_config.max_loot_actions_counted)
 	return actions
 
 func resolve_deadlock_situation(player_pos: Vector2i):
@@ -189,10 +198,11 @@ func resolve_deadlock_situation(player_pos: Vector2i):
 func create_escape_routes(center_pos: Vector2i):
 	"""Clear loot items around player to create movement corridors"""
 	var cleared_count = 0
+	var clear_radius = loot_gen_config.escape_route_radius
 	
-	# Clear 3x3 area around player
-	for x_offset in range(-1, 2):
-		for y_offset in range(-1, 2):
+	# Clear area around player based on config
+	for x_offset in range(-clear_radius, clear_radius + 1):
+		for y_offset in range(-clear_radius, clear_radius + 1):
 			if x_offset == 0 and y_offset == 0:
 				continue  # Skip player position
 			
@@ -210,18 +220,22 @@ func create_escape_routes(center_pos: Vector2i):
 
 func add_emergency_loot(center_pos: Vector2i):
 	"""Add collectible loot nearby to give player action options"""
-	var directions = [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
+	var distance = loot_gen_config.emergency_loot_distance
+	var directions = [
+		Vector2i(distance, 0), Vector2i(-distance, 0), 
+		Vector2i(0, distance), Vector2i(0, -distance)
+	]
 	var added_count = 0
+	var max_count = loot_gen_config.emergency_loot_count
 	
 	for direction in directions:
 		var loot_pos = center_pos + direction
 		
 		if is_valid_grid_position(loot_pos) and not is_position_blocked(loot_pos):
-			# Add easy-to-collect loot
-			create_loot_item_at_position("coin", loot_pos)
+			create_loot_item_at_position(loot_gen_config.emergency_loot_type, loot_pos)
 			added_count += 1
 			
-			if added_count >= 2:  # Limit emergency loot
+			if added_count >= max_count:
 				break
 	
 	print("Added ", added_count, " emergency loot items")
@@ -234,7 +248,7 @@ func reposition_blocking_enemies(center_pos: Vector2i):
 		var distance = abs(enemy.grid_x - center_pos.x) + abs(enemy.grid_y - center_pos.y)
 		
 		# If enemy is too close and potentially blocking
-		if distance <= 2:
+		if distance <= loot_gen_config.enemy_reposition_distance:
 			var new_pos = find_safe_enemy_position(center_pos, enemy)
 			if new_pos != Vector2i(-1, -1):
 				enemy.grid_x = new_pos.x
@@ -246,7 +260,8 @@ func reposition_blocking_enemies(center_pos: Vector2i):
 
 func find_safe_enemy_position(avoid_center: Vector2i, enemy: CharacterBody2D) -> Vector2i:
 	"""Find a safe position for enemy away from player"""
-	for attempt in range(20):  # Try 20 random positions
+	var max_attempts = loot_gen_config.enemy_position_attempts
+	for attempt in range(max_attempts):
 		var new_pos = Vector2i(
 			randi_range(1, grid_size - 2),
 			randi_range(1, grid_size - 2)
@@ -255,7 +270,7 @@ func find_safe_enemy_position(avoid_center: Vector2i, enemy: CharacterBody2D) ->
 		var distance_from_player = abs(new_pos.x - avoid_center.x) + abs(new_pos.y - avoid_center.y)
 		
 		# Position must be far enough and valid
-		if distance_from_player >= 4 and not is_position_blocked(new_pos):
+		if distance_from_player >= loot_gen_config.min_enemy_safe_distance and not is_position_blocked(new_pos):
 			return new_pos
 	
 	return Vector2i(-1, -1)  # No safe position found
@@ -1446,27 +1461,33 @@ func ensure_balanced_corridors(valid_pos: Array[Vector2i]) -> Array[Vector2i]:
 	var strategic_positions = valid_pos.duplicate()
 	var player_pos = Vector2i(player.grid_x, player.grid_y)
 	
-	print("Starting with ", strategic_positions.size(), " positions")
+	if loot_gen_config.debug_corridor_system:
+		print("Starting corridor reservation with ", strategic_positions.size(), " positions")
 	
-	# Reserve only immediate player area (1x1, not 3x3)
 	var positions_to_remove: Array[Vector2i] = []
 	
-	# Keep player position clear
-	if player_pos in strategic_positions:
-		positions_to_remove.append(player_pos)
+	# Reserve player area based on config
+	for x_offset in range(-loot_gen_config.player_clear_radius, loot_gen_config.player_clear_radius + 1):
+		for y_offset in range(-loot_gen_config.player_clear_radius, loot_gen_config.player_clear_radius + 1):
+			var check_pos = player_pos + Vector2i(x_offset, y_offset)
+			if check_pos in strategic_positions:
+				if randf() < loot_gen_config.player_area_clear_chance:
+					positions_to_remove.append(check_pos)
 	
-	# Reserve some corridor positions (much less aggressive)
+	# Reserve corridor positions based on config
 	for pos in strategic_positions:
-		# Reserve every 4th row/column as partial corridors (not every 3rd)
-		if (pos.x % 4 == 2) and (pos.y % 4 == 2):
-			if randf() < 0.2:  # Only 20% chance to reserve (was 30%)
+		var freq = loot_gen_config.corridor_reservation_frequency
+		if (pos.x % freq == 2) and (pos.y % freq == 2):
+			if randf() < loot_gen_config.corridor_reservation_chance:
 				positions_to_remove.append(pos)
 	
 	# Remove reserved positions
 	for pos in positions_to_remove:
 		strategic_positions.erase(pos)
 	
-	print("After corridor reservation: ", strategic_positions.size(), " positions available")
+	if loot_gen_config.debug_corridor_system:
+		print("After corridor reservation: ", strategic_positions.size(), " positions available")
+	
 	return strategic_positions
 
 func fill_remaining_positions(all_valid_pos: Array[Vector2i], used_positions: Array[Vector2i]):
@@ -1478,11 +1499,10 @@ func fill_remaining_positions(all_valid_pos: Array[Vector2i], used_positions: Ar
 			remaining_positions.append(pos)
 	
 	if remaining_positions.size() > 0:
-		print("Filling ", remaining_positions.size(), " remaining positions with balanced loot")
+		print("Filling ", remaining_positions.size(), " remaining positions with filler loot")
 		
-		var filler_types = ["coin", "health_potion", "sword", "shield"]
 		for pos in remaining_positions:
-			var loot_type = filler_types[randi() % filler_types.size()]
+			var loot_type = loot_gen_config.get_filler_loot_type()
 			create_loot_item_at_position(loot_type, pos)
 
 func position_has_loot(pos: Vector2i) -> bool:
@@ -1510,14 +1530,14 @@ func create_strategic_clusters(positions: Array[Vector2i]) -> Dictionary:
 		# Check if near any enemy
 		for enemy in enemies:
 			var enemy_distance = abs(pos.x - enemy.grid_x) + abs(pos.y - enemy.grid_y)
-			if enemy_distance <= 2:
+			if enemy_distance <= loot_gen_config.high_value_enemy_distance:
 				near_enemy = true
 				break
 		
-		# Classify position based on strategic value
-		if near_enemy and distance_to_player > 4:
+		# Classify position based on strategic value using config thresholds
+		if near_enemy and distance_to_player > loot_gen_config.high_value_player_distance:
 			clusters["high_value"].append(pos)
-		elif distance_to_player <= 2:
+		elif distance_to_player <= loot_gen_config.easy_access_player_distance:
 			clusters["easy_access"].append(pos)
 		elif has_cluster_potential(pos, positions):
 			clusters["chain_starters"].append(pos)
@@ -1556,32 +1576,30 @@ func distribute_loot_strategically(clusters: Dictionary, enemy_positions: Array[
 
 func place_high_value_loot(positions: Array[Vector2i]):
 	"""Place valuable loot (weapons, armor) in high-risk positions"""
-	var valuable_types = ["sword", "shield"]
 	for pos in positions:
-		if positions.size() > 0:
-			var loot_type = valuable_types[randi() % valuable_types.size()]
-			create_loot_item_at_position(loot_type, pos)
+		var loot_type = loot_gen_config.get_high_value_loot_type()
+		create_loot_item_at_position(loot_type, pos)
 
 func place_chain_starter_loot(positions: Array[Vector2i]):
 	"""Place same-type loot in clusters to enable good chains"""
 	if positions.size() == 0:
 		return
 	
-	var cluster_type = ["coin", "health_potion"][randi() % 2]  # Choose one type for cluster
-	for i in range(min(positions.size(), 6)):  # Limit cluster size
+	var cluster_type = loot_gen_config.get_chain_starter_loot_type()
+	var max_cluster = loot_gen_config.max_chain_cluster_size
+	for i in range(min(positions.size(), max_cluster)):
 		create_loot_item_at_position(cluster_type, positions[i])
 
 func place_easy_access_loot(positions: Array[Vector2i]):
 	"""Place common loot near player for easy early collection"""
 	for pos in positions:
-		var common_type = "coin"  # Most common, easy to collect
-		create_loot_item_at_position(common_type, pos)
+		var loot_type = loot_gen_config.get_balanced_loot_type()  # Use balanced for variety
+		create_loot_item_at_position(loot_type, pos)
 
 func place_medium_value_loot(positions: Array[Vector2i]):
 	"""Place balanced mix of loot types"""
-	var balanced_types = ["coin", "health_potion", "sword", "shield"]
 	for pos in positions:
-		var loot_type = balanced_types[randi() % balanced_types.size()]
+		var loot_type = loot_gen_config.get_balanced_loot_type()
 		create_loot_item_at_position(loot_type, pos)
 
 func create_enemy_loot_items(enemy_positions: Array[Vector2i]):
@@ -1741,3 +1759,15 @@ func is_position_blocked(pos: Vector2i) -> bool:
 			return true
 	
 	return false
+
+func test_config_system():
+	"""Test function to verify configuration system is working"""
+	print("\n🧪 TESTING CONFIGURATION SYSTEM")
+	print("📋 Current config settings:")
+	print("  • Field coverage: ", loot_gen_config.field_coverage_ratio)
+	print("  • Deadlock check interval: ", loot_gen_config.deadlock_check_interval, "s")
+	print("  • Max stuck time: ", loot_gen_config.max_stuck_time, "s")
+	print("  • Emergency loot type: ", loot_gen_config.emergency_loot_type)
+	print("  • High-value loot ratio: ", loot_gen_config.strategic_distribution_ratios["high_value"])
+	print("  • Corridor reservation frequency: ", loot_gen_config.corridor_reservation_frequency)
+	print("✅ Configuration system test complete\n")
