@@ -1438,6 +1438,11 @@ func create_organized_loot_distribution(valid_pos: Array[Vector2i], enemy_pos: A
 	print("=== STRATEGIC LOOT DISTRIBUTION SYSTEM ===")
 	print("Input positions - Valid: ", valid_pos.size(), " Enemy: ", enemy_pos.size())
 	
+	# Ensure configuration is properly initialized
+	if not loot_gen_config:
+		print("⚠️ loot_gen_config not initialized, creating new instance")
+		loot_gen_config = LootGenerationConfig.new()
+	
 	if valid_pos.size() == 0:
 		print("⚠️ No valid positions for loot placement!")
 		return
