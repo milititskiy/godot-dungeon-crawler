@@ -1012,7 +1012,7 @@ func check_battle_state():
 
 func get_adjacent_enemies(character: CharacterBody2D) -> Array[CharacterBody2D]:
 	"""Get all enemies adjacent to the given character"""
-	var adjacent = []
+	var adjacent: Array[CharacterBody2D] = []
 	var char_pos = character.get_grid_position()
 	
 	# Check all 4 adjacent positions (no diagonals for battle)
@@ -1180,7 +1180,7 @@ func highlight_tile(grid_pos: Vector2i):
 
 func get_tile_contents(x: int, y: int) -> String:
 	"""Debug function to see what's on a tile"""
-	var contents = []
+	var contents: Array[String] = []
 	
 	# Check for player
 	if player and player.grid_x == x and player.grid_y == y:
@@ -1515,10 +1515,10 @@ func position_has_loot(pos: Vector2i) -> bool:
 func create_strategic_clusters(positions: Array[Vector2i]) -> Dictionary:
 	"""Create clusters of positions for strategic loot placement"""
 	var clusters = {
-		"high_value": [],    # Near enemies, harder to reach
-		"medium_value": [],  # Moderate accessibility
-		"easy_access": [],   # Close to player, easy to collect
-		"chain_starters": [] # Positions that can start good chains
+		"high_value": Array[Vector2i](),    # Near enemies, harder to reach
+		"medium_value": Array[Vector2i](),  # Moderate accessibility
+		"easy_access": Array[Vector2i](),   # Close to player, easy to collect
+		"chain_starters": Array[Vector2i]() # Positions that can start good chains
 	}
 	
 	var player_pos = Vector2i(player.grid_x, player.grid_y)
