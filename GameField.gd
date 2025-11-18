@@ -1421,9 +1421,14 @@ func drop_loot_around_enemies():
 func create_organized_loot_distribution(valid_pos: Array[Vector2i], enemy_pos: Array[Vector2i]):
 	"""Create a sophisticated strategic loot distribution system"""
 	print("=== STRATEGIC LOOT DISTRIBUTION SYSTEM ===")
+	print("Input positions - Valid: ", valid_pos.size(), " Enemy: ", enemy_pos.size())
 	
-	# Step 1: Ensure connectivity and movement corridors
-	var strategic_positions = ensure_movement_corridors(valid_pos)
+	if valid_pos.size() == 0:
+		print("⚠️ No valid positions for loot placement!")
+		return
+	
+	# Step 1: Strategic corridor management (less aggressive)
+	var strategic_positions = ensure_balanced_corridors(valid_pos)
 	
 	# Step 2: Create loot clusters for match-3 opportunities
 	var loot_clusters = create_strategic_clusters(strategic_positions)
@@ -1431,35 +1436,61 @@ func create_organized_loot_distribution(valid_pos: Array[Vector2i], enemy_pos: A
 	# Step 3: Distribute loot types strategically
 	distribute_loot_strategically(loot_clusters, enemy_pos)
 	
+	# Step 4: Fill remaining positions if needed
+	fill_remaining_positions(valid_pos, strategic_positions)
+	
 	print("Strategic distribution complete: ", loot_items.size(), " items placed")
 
-func ensure_movement_corridors(valid_pos: Array[Vector2i]) -> Array[Vector2i]:
-	"""Ensure player always has movement options by reserving corridors"""
+func ensure_balanced_corridors(valid_pos: Array[Vector2i]) -> Array[Vector2i]:
+	"""Ensure movement corridors while keeping more loot positions"""
 	var strategic_positions = valid_pos.duplicate()
 	var player_pos = Vector2i(player.grid_x, player.grid_y)
 	
-	# Reserve corridors around player (3x3 area)
-	var reserved_positions: Array[Vector2i] = []
-	for x_offset in range(-1, 2):
-		for y_offset in range(-1, 2):
-			var check_pos = player_pos + Vector2i(x_offset, y_offset)
-			if check_pos in strategic_positions:
-				reserved_positions.append(check_pos)
+	print("Starting with ", strategic_positions.size(), " positions")
 	
-	# Remove some positions around player to ensure movement
-	for pos in reserved_positions:
-		if randf() < 0.4:  # 40% chance to keep empty for movement
-			strategic_positions.erase(pos)
+	# Reserve only immediate player area (1x1, not 3x3)
+	var positions_to_remove: Array[Vector2i] = []
 	
-	# Reserve main pathways (every 3rd row/column as corridors)
-	for i in range(strategic_positions.size() - 1, -1, -1):
-		var pos = strategic_positions[i]
-		if (pos.x % 3 == 1) or (pos.y % 3 == 1):  # Corridor positions
-			if randf() < 0.3:  # 30% chance to keep as corridor
-				strategic_positions.remove_at(i)
+	# Keep player position clear
+	if player_pos in strategic_positions:
+		positions_to_remove.append(player_pos)
 	
-	print("Reserved corridors, usable positions: ", strategic_positions.size())
+	# Reserve some corridor positions (much less aggressive)
+	for pos in strategic_positions:
+		# Reserve every 4th row/column as partial corridors (not every 3rd)
+		if (pos.x % 4 == 2) and (pos.y % 4 == 2):
+			if randf() < 0.2:  # Only 20% chance to reserve (was 30%)
+				positions_to_remove.append(pos)
+	
+	# Remove reserved positions
+	for pos in positions_to_remove:
+		strategic_positions.erase(pos)
+	
+	print("After corridor reservation: ", strategic_positions.size(), " positions available")
 	return strategic_positions
+
+func fill_remaining_positions(all_valid_pos: Array[Vector2i], used_positions: Array[Vector2i]):
+	"""Fill any remaining empty positions with balanced loot"""
+	var remaining_positions: Array[Vector2i] = []
+	
+	for pos in all_valid_pos:
+		if not position_has_loot(pos):
+			remaining_positions.append(pos)
+	
+	if remaining_positions.size() > 0:
+		print("Filling ", remaining_positions.size(), " remaining positions with balanced loot")
+		
+		var filler_types = ["coin", "health_potion", "sword", "shield"]
+		for pos in remaining_positions:
+			var loot_type = filler_types[randi() % filler_types.size()]
+			create_loot_item_at_position(loot_type, pos)
+
+func position_has_loot(pos: Vector2i) -> bool:
+	"""Check if position already has loot placed"""
+	for loot in loot_items:
+		if is_instance_valid(loot) and Vector2i(loot.grid_x, loot.grid_y) == pos:
+			return true
+	return false
 
 func create_strategic_clusters(positions: Array[Vector2i]) -> Dictionary:
 	"""Create clusters of positions for strategic loot placement"""
