@@ -55,28 +55,28 @@ class_name LootGenerationConfig
 # ================================
 
 ## High-value loot types (placed near enemies)
-var high_value_types = ["sword", "shield"]
-var high_value_weights = [0.6, 0.4]  # Sword more common than shield
+var high_value_types: Array[String] = ["sword", "shield"]
+var high_value_weights: Array[float] = [0.6, 0.4]  # Sword more common than shield
 
 ## Chain starter loot types (for guaranteed clusters)
-var chain_starter_types = ["coin", "health_potion"]
-var chain_starter_weights = [0.7, 0.3]  # Coins more common
+var chain_starter_types: Array[String] = ["coin", "health_potion"]
+var chain_starter_weights: Array[float] = [0.7, 0.3]  # Coins more common
 
 ## Balanced mix for medium-value positions
-var balanced_types = ["coin", "health_potion", "sword", "shield"]  
-var balanced_weights = [0.4, 0.3, 0.2, 0.1]  # Coins most common, shields rarest
+var balanced_types: Array[String] = ["coin", "health_potion", "sword", "shield"]  
+var balanced_weights: Array[float] = [0.4, 0.3, 0.2, 0.1]  # Coins most common, shields rarest
 
 ## Filler types for remaining positions
-var filler_types = ["coin", "health_potion", "sword", "shield"]
-var filler_weights = [0.5, 0.25, 0.15, 0.1]  # Heavy coin bias for filler
+var filler_types: Array[String] = ["coin", "health_potion", "sword", "shield"]
+var filler_weights: Array[float] = [0.5, 0.25, 0.15, 0.1]  # Heavy coin bias for filler
 
 # ================================
 # 🤖 ENEMY LOOT GENERATION
 # ================================
 
 ## Enemy loot types and their rarities
-var enemy_loot_types = ["goblin", "orc", "skeleton", "spider"]
-var enemy_loot_weights = [0.3, 0.25, 0.25, 0.2]  # Goblins most common
+var enemy_loot_types: Array[String] = ["goblin", "orc", "skeleton", "spider"]
+var enemy_loot_weights: Array[float] = [0.3, 0.25, 0.25, 0.2]  # Goblins most common
 
 ## Always create enemy loot items?
 @export var always_create_enemy_loot: bool = true
