@@ -78,6 +78,13 @@ var combat_target_enemy: CharacterBody2D = null
 
 @onready var camera = $Camera2D
 
+# Anti-deadlock system
+var deadlock_check_timer: float = 0.0
+var deadlock_check_interval: float = 5.0  # Check every 5 seconds
+var last_player_position: Vector2i
+var position_stuck_time: float = 0.0
+var max_stuck_time: float = 10.0  # 10 seconds before intervention
+
 func _ready():
 	# Initialize loot configuration
 	loot_config = LootConfig.new()
@@ -88,6 +95,170 @@ func _ready():
 	spawn_player()
 	spawn_enemies()
 	center_camera()
+	
+	# Initialize anti-deadlock system
+	last_player_position = Vector2i(player.grid_x, player.grid_y)
+
+func _process(delta: float):
+	"""Monitor for deadlock situations and provide automatic solutions"""
+	deadlock_check_timer += delta
+	
+	if deadlock_check_timer >= deadlock_check_interval:
+		deadlock_check_timer = 0.0
+		check_for_deadlock_situation()
+
+func check_for_deadlock_situation():
+	"""Detect and resolve deadlock situations automatically"""
+	var current_pos = Vector2i(player.grid_x, player.grid_y)
+	
+	# Check if player is stuck in same position
+	if current_pos == last_player_position:
+		position_stuck_time += deadlock_check_interval
+		
+		if position_stuck_time >= max_stuck_time:
+			print("🚨 DEADLOCK DETECTED: Player stuck for ", position_stuck_time, " seconds")
+			resolve_deadlock_situation(current_pos)
+			position_stuck_time = 0.0
+	else:
+		# Player moved, reset timer
+		position_stuck_time = 0.0
+		last_player_position = current_pos
+	
+	# Additional checks for movement availability
+	check_movement_options(current_pos)
+
+func check_movement_options(player_pos: Vector2i):
+	"""Check if player has sufficient movement and action options"""
+	var available_moves = count_available_moves(player_pos)
+	var available_actions = count_available_actions(player_pos)
+	
+	if available_moves < 2 and available_actions == 0:
+		print("⚠️ LIMITED OPTIONS: Only ", available_moves, " moves, ", available_actions, " actions")
+		if available_moves == 0:
+			print("🆘 EMERGENCY: No movement options available!")
+			resolve_deadlock_situation(player_pos)
+
+func count_available_moves(pos: Vector2i) -> int:
+	"""Count how many directions player can move"""
+	var moves = 0
+	var directions = [Vector2i(0,1), Vector2i(1,0), Vector2i(0,-1), Vector2i(-1,0)]
+	
+	for direction in directions:
+		var check_pos = pos + direction
+		if is_valid_grid_position(check_pos) and not is_position_blocked(check_pos):
+			moves += 1
+	
+	return moves
+
+func count_available_actions(pos: Vector2i) -> int:
+	"""Count available actions (combat, loot collection, etc.)"""
+	var actions = 0
+	
+	# Check for adjacent enemies (combat options)
+	for enemy in enemies:
+		var distance = abs(enemy.grid_x - pos.x) + abs(enemy.grid_y - pos.y)
+		if distance == 1:
+			actions += 1
+	
+	# Check for nearby loot (collection options)
+	var nearby_loot = 0
+	for loot in loot_items:
+		if is_instance_valid(loot):
+			var distance = abs(loot.grid_x - pos.x) + abs(loot.grid_y - pos.y)
+			if distance <= 2:  # Within reasonable reach
+				nearby_loot += 1
+	
+	actions += min(nearby_loot, 3)  # Cap loot actions for calculation
+	return actions
+
+func resolve_deadlock_situation(player_pos: Vector2i):
+	"""Automatically resolve deadlock by creating escape routes and opportunities"""
+	print("🔧 RESOLVING DEADLOCK at position (", player_pos.x, ", ", player_pos.y, ")")
+	
+	# Solution 1: Clear escape routes
+	create_escape_routes(player_pos)
+	
+	# Solution 2: Add strategic loot for collection opportunities  
+	add_emergency_loot(player_pos)
+	
+	# Solution 3: Reposition problematic enemies
+	reposition_blocking_enemies(player_pos)
+	
+	print("✅ Deadlock resolution completed")
+
+func create_escape_routes(center_pos: Vector2i):
+	"""Clear loot items around player to create movement corridors"""
+	var cleared_count = 0
+	
+	# Clear 3x3 area around player
+	for x_offset in range(-1, 2):
+		for y_offset in range(-1, 2):
+			if x_offset == 0 and y_offset == 0:
+				continue  # Skip player position
+			
+			var check_pos = center_pos + Vector2i(x_offset, y_offset)
+			
+			# Remove any loot at this position
+			for i in range(loot_items.size() - 1, -1, -1):
+				var loot = loot_items[i]
+				if is_instance_valid(loot) and Vector2i(loot.grid_x, loot.grid_y) == check_pos:
+					loot.queue_free()
+					loot_items.remove_at(i)
+					cleared_count += 1
+	
+	print("Cleared ", cleared_count, " loot items to create escape routes")
+
+func add_emergency_loot(center_pos: Vector2i):
+	"""Add collectible loot nearby to give player action options"""
+	var directions = [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]
+	var added_count = 0
+	
+	for direction in directions:
+		var loot_pos = center_pos + direction
+		
+		if is_valid_grid_position(loot_pos) and not is_position_blocked(loot_pos):
+			# Add easy-to-collect loot
+			create_loot_item_at_position("coin", loot_pos)
+			added_count += 1
+			
+			if added_count >= 2:  # Limit emergency loot
+				break
+	
+	print("Added ", added_count, " emergency loot items")
+
+func reposition_blocking_enemies(center_pos: Vector2i):
+	"""Move enemies that might be blocking player movement"""
+	var repositioned_count = 0
+	
+	for enemy in enemies:
+		var distance = abs(enemy.grid_x - center_pos.x) + abs(enemy.grid_y - center_pos.y)
+		
+		# If enemy is too close and potentially blocking
+		if distance <= 2:
+			var new_pos = find_safe_enemy_position(center_pos, enemy)
+			if new_pos != Vector2i(-1, -1):
+				enemy.grid_x = new_pos.x
+				enemy.grid_y = new_pos.y
+				enemy.position = get_world_position(new_pos)
+				repositioned_count += 1
+	
+	print("Repositioned ", repositioned_count, " blocking enemies")
+
+func find_safe_enemy_position(avoid_center: Vector2i, enemy: CharacterBody2D) -> Vector2i:
+	"""Find a safe position for enemy away from player"""
+	for attempt in range(20):  # Try 20 random positions
+		var new_pos = Vector2i(
+			randi_range(1, grid_size - 2),
+			randi_range(1, grid_size - 2)
+		)
+		
+		var distance_from_player = abs(new_pos.x - avoid_center.x) + abs(new_pos.y - avoid_center.y)
+		
+		# Position must be far enough and valid
+		if distance_from_player >= 4 and not is_position_blocked(new_pos):
+			return new_pos
+	
+	return Vector2i(-1, -1)  # No safe position found
 	
 	# Connect start button and setup UI
 	var button_path = "UI/ControlPanel/ControlContainer/StartButton"
@@ -1248,26 +1419,167 @@ func drop_loot_around_enemies():
 	print("Total loot items created: ", loot_items.size())
 
 func create_organized_loot_distribution(valid_pos: Array[Vector2i], enemy_pos: Array[Vector2i]):
-	"""Create a balanced and organized loot distribution"""
-	var total_positions = valid_pos.size()
+	"""Create a sophisticated strategic loot distribution system"""
+	print("=== STRATEGIC LOOT DISTRIBUTION SYSTEM ===")
 	
-	# Define distribution percentages for each category
-	var distribution = {
-		"weapons": 0.25,     # 25% weapons
-		"armor": 0.20,       # 20% armor  
-		"potions": 0.20,     # 20% potions
-		"currency": 0.35     # 35% currency (most common)
+	# Step 1: Ensure connectivity and movement corridors
+	var strategic_positions = ensure_movement_corridors(valid_pos)
+	
+	# Step 2: Create loot clusters for match-3 opportunities
+	var loot_clusters = create_strategic_clusters(strategic_positions)
+	
+	# Step 3: Distribute loot types strategically
+	distribute_loot_strategically(loot_clusters, enemy_pos)
+	
+	print("Strategic distribution complete: ", loot_items.size(), " items placed")
+
+func ensure_movement_corridors(valid_pos: Array[Vector2i]) -> Array[Vector2i]:
+	"""Ensure player always has movement options by reserving corridors"""
+	var strategic_positions = valid_pos.duplicate()
+	var player_pos = Vector2i(player.grid_x, player.grid_y)
+	
+	# Reserve corridors around player (3x3 area)
+	var reserved_positions: Array[Vector2i] = []
+	for x_offset in range(-1, 2):
+		for y_offset in range(-1, 2):
+			var check_pos = player_pos + Vector2i(x_offset, y_offset)
+			if check_pos in strategic_positions:
+				reserved_positions.append(check_pos)
+	
+	# Remove some positions around player to ensure movement
+	for pos in reserved_positions:
+		if randf() < 0.4:  # 40% chance to keep empty for movement
+			strategic_positions.erase(pos)
+	
+	# Reserve main pathways (every 3rd row/column as corridors)
+	for i in range(strategic_positions.size() - 1, -1, -1):
+		var pos = strategic_positions[i]
+		if (pos.x % 3 == 1) or (pos.y % 3 == 1):  # Corridor positions
+			if randf() < 0.3:  # 30% chance to keep as corridor
+				strategic_positions.remove_at(i)
+	
+	print("Reserved corridors, usable positions: ", strategic_positions.size())
+	return strategic_positions
+
+func create_strategic_clusters(positions: Array[Vector2i]) -> Dictionary:
+	"""Create clusters of positions for strategic loot placement"""
+	var clusters = {
+		"high_value": [],    # Near enemies, harder to reach
+		"medium_value": [],  # Moderate accessibility
+		"easy_access": [],   # Close to player, easy to collect
+		"chain_starters": [] # Positions that can start good chains
 	}
 	
-	print("=== LOOT DISTRIBUTION PLAN ===")
-	var loot_plan: Array[String] = []
+	var player_pos = Vector2i(player.grid_x, player.grid_y)
 	
-	# Calculate quantities for each category
-	for category in distribution.keys():
-		var quantity = int(total_positions * distribution[category])
-		print(category.capitalize(), ": ", quantity, " items (", distribution[category] * 100, "%)")
+	for pos in positions:
+		var distance_to_player = abs(pos.x - player_pos.x) + abs(pos.y - player_pos.y)
+		var near_enemy = false
 		
-		# Add items to plan
+		# Check if near any enemy
+		for enemy in enemies:
+			var enemy_distance = abs(pos.x - enemy.grid_x) + abs(pos.y - enemy.grid_y)
+			if enemy_distance <= 2:
+				near_enemy = true
+				break
+		
+		# Classify position based on strategic value
+		if near_enemy and distance_to_player > 4:
+			clusters["high_value"].append(pos)
+		elif distance_to_player <= 2:
+			clusters["easy_access"].append(pos)
+		elif has_cluster_potential(pos, positions):
+			clusters["chain_starters"].append(pos)
+		else:
+			clusters["medium_value"].append(pos)
+	
+	print("Clusters created - High:", clusters["high_value"].size(), 
+		  " Medium:", clusters["medium_value"].size(),
+		  " Easy:", clusters["easy_access"].size(),
+		  " Chains:", clusters["chain_starters"].size())
+	
+	return clusters
+
+func has_cluster_potential(pos: Vector2i, all_positions: Array[Vector2i]) -> bool:
+	"""Check if position has potential for creating good match-3 clusters"""
+	var adjacent_count = 0
+	var directions = [Vector2i(0,1), Vector2i(1,0), Vector2i(0,-1), Vector2i(-1,0)]
+	
+	for direction in directions:
+		var check_pos = pos + direction
+		if check_pos in all_positions:
+			adjacent_count += 1
+	
+	return adjacent_count >= 2  # Good for clusters if 2+ adjacent positions
+
+func distribute_loot_strategically(clusters: Dictionary, enemy_positions: Array[Vector2i]):
+	"""Distribute loot types based on strategic considerations"""
+	var loot_types = get_all_loot_types()
+	
+	# Strategic distribution rules
+	place_high_value_loot(clusters["high_value"])           # Weapons/rare items near enemies
+	place_chain_starter_loot(clusters["chain_starters"])    # Same types for good chains  
+	place_easy_access_loot(clusters["easy_access"])         # Currency/common items
+	place_medium_value_loot(clusters["medium_value"])       # Balanced mix
+	create_enemy_loot_items(enemy_positions)                # Enemy loot items
+
+func place_high_value_loot(positions: Array[Vector2i]):
+	"""Place valuable loot (weapons, armor) in high-risk positions"""
+	var valuable_types = ["sword", "shield"]
+	for pos in positions:
+		if positions.size() > 0:
+			var loot_type = valuable_types[randi() % valuable_types.size()]
+			create_loot_item_at_position(loot_type, pos)
+
+func place_chain_starter_loot(positions: Array[Vector2i]):
+	"""Place same-type loot in clusters to enable good chains"""
+	if positions.size() == 0:
+		return
+	
+	var cluster_type = ["coin", "health_potion"][randi() % 2]  # Choose one type for cluster
+	for i in range(min(positions.size(), 6)):  # Limit cluster size
+		create_loot_item_at_position(cluster_type, positions[i])
+
+func place_easy_access_loot(positions: Array[Vector2i]):
+	"""Place common loot near player for easy early collection"""
+	for pos in positions:
+		var common_type = "coin"  # Most common, easy to collect
+		create_loot_item_at_position(common_type, pos)
+
+func place_medium_value_loot(positions: Array[Vector2i]):
+	"""Place balanced mix of loot types"""
+	var balanced_types = ["coin", "health_potion", "sword", "shield"]
+	for pos in positions:
+		var loot_type = balanced_types[randi() % balanced_types.size()]
+		create_loot_item_at_position(loot_type, pos)
+
+func create_enemy_loot_items(enemy_positions: Array[Vector2i]):
+	"""Create enemy loot items at enemy positions"""
+	for pos in enemy_positions:
+		var enemy_at_pos = null
+		for enemy in enemies:
+			if Vector2i(enemy.grid_x, enemy.grid_y) == pos:
+				enemy_at_pos = enemy
+				break
+		
+		if enemy_at_pos:
+			create_enemy_loot_item(pos, enemy_at_pos)
+
+func create_loot_item_at_position(loot_type: String, pos: Vector2i):
+	"""Helper function to create individual loot items"""
+	var loot_item = preload("res://LootItem.gd").new()
+	loot_item.setup(loot_type, pos)
+	
+	# Position in world coordinates
+	var world_pos = get_world_position(pos)
+	loot_item.position = world_pos
+	
+	# Connect collection signal
+	loot_item.item_collected.connect(_on_loot_item_collected)
+	
+	# Add to scene and tracking array
+	add_child(loot_item)
+	loot_items.append(loot_item)
 		var items_in_category = loot_categories[category]
 		for i in range(quantity):
 			var random_item = items_in_category[randi() % items_in_category.size()]
